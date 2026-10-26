@@ -42,7 +42,7 @@ function texture(surface,reverse){
 }
 texture(front,false);texture(back,true);
 function resize(){width=innerWidth;height=innerHeight;const dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);scale=Math.min(width/650,height/1100);}
-addEventListener('resize',resize);resize();
+addEventListener('resize',()=>{resize();wake();});resize();
 function point(x,y,t,stub=false){
  const nx=(x-W/2),ny=y-H/2;
  let z=Math.sin(y/H*Math.PI)*bend*(.4+x/W)+Math.sin(y/H*5+t*.001)*5;
@@ -61,7 +61,10 @@ function triangle(image,a,b,c,sa,sb,sc){
  const dd=(a.y*(sc.x-sb.x)+b.y*(sa.x-sc.x)+c.y*(sb.x-sa.x))/det;
  const center={x:(a.x+b.x+c.x)/3,y:(a.y+b.y+c.y)/3};
  const expanded=[a,b,c].map(p=>{const dx=p.x-center.x,dy=p.y-center.y,len=Math.hypot(dx,dy)||1;return {x:p.x+dx/len*.75,y:p.y+dy/len*.75};});
- ctx.save();ctx.beginPath();ctx.moveTo(expanded[0].x,expanded[0].y);ctx.lineTo(expanded[1].x,expanded[1].y);ctx.lineTo(expanded[2].x,expanded[2].y);ctx.closePath();ctx.clip();ctx.transform(aa,bb,cc,dd,a.x-aa*sa.x-cc*sa.y,a.y-bb*sa.x-dd*sa.y);ctx.drawImage(image,0,0);ctx.restore();
+ ctx.save();ctx.beginPath();ctx.moveTo(expanded[0].x,expanded[0].y);ctx.lineTo(expanded[1].x,expanded[1].y);ctx.lineTo(expanded[2].x,expanded[2].y);ctx.closePath();ctx.clip();ctx.transform(aa,bb,cc,dd,a.x-aa*sa.x-cc*sa.y,a.y-bb*sa.x-dd*sa.y);// Sample only this triangle's texture rectangle, not the entire ticket.
+ const sx=Math.max(0,Math.floor(Math.min(sa.x,sb.x,sc.x))-2),sy=Math.max(0,Math.floor(Math.min(sa.y,sb.y,sc.y))-2);
+ const sw=Math.min(image.width,Math.ceil(Math.max(sa.x,sb.x,sc.x))+2)-sx,sh=Math.min(image.height,Math.ceil(Math.max(sa.y,sb.y,sc.y))+2)-sy;
+ ctx.drawImage(image,sx,sy,sw,sh,sx,sy,sw,sh);ctx.restore();
 }
 function paper(t,start,end,stub){
  const image=Math.cos(spin)>=0?front:back;
@@ -76,8 +79,11 @@ function paper(t,start,end,stub){
  if(!stub&&Math.cos(spin)>.3){const p=point(240,418,t);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(angle);ctx.scale(Math.cos(spin),1);const r=98*scale;const g=ctx.createLinearGradient(-r,-r,r,r);g.addColorStop(0,'#a7ffef00');g.addColorStop(.5+Math.sin(t*.0007+bend*.008)*.25,'#fff4cb66');g.addColorStop(1,'#fca2ff00');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();ctx.restore();}
  if(torn){ctx.strokeStyle='#f5e9cf';ctx.lineWidth=2;ctx.beginPath();for(let i=0;i<=80;i++){const p=point(i*6,stub?CUT+((i%2)*3):CUT-((i%2)*3),t,stub);if(i===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);}ctx.stroke();}
 }
-let last=0;
-function frame(t){const dt=Math.min((t-last)||16,32)/16.67;last=t;
+// Render on demand; a resting paper ticket consumes no animation work.
+let last=0,pending=0;
+function wake(){if(!pending&&!document.hidden){last=0;pending=requestAnimationFrame(frame);}}
+document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(pending);pending=0;}else wake();});
+function frame(t){pending=0;const dt=Math.min((t-last)||16,32)/16.67;last=t;
  if(!drag){velocity+=(-bend*.07-velocity*.17)*dt;bend+=velocity*dt;}
  spin+=(targetSpin-spin)*.14*dt;
  if(torn){tearTime+=dt*16.67;pull+=(95-pull)*.08*dt;}else if(!drag)pull*=Math.pow(.8,dt);
@@ -88,18 +94,19 @@ function frame(t){const dt=Math.min((t-last)||16,32)/16.67;last=t;
  ctx.save();ctx.translate(width/2+12,height/2+28);ctx.rotate(angle);ctx.scale(1,1.5);const sh=ctx.createRadialGradient(0,0,20,0,0,220*scale);sh.addColorStop(0,'#00000077');sh.addColorStop(1,'#00000000');ctx.fillStyle=sh;ctx.fillRect(-250*scale,-250*scale,500*scale,500*scale);ctx.restore();
  paper(t,0,CUT,false);paper(t,CUT,H,true);
  if(!ready&&window.__gbSandbox){window.__gbSandbox.ready();ready=true;}
- requestAnimationFrame(frame);
+ const moving=Math.abs(bend)>.08||Math.abs(velocity)>.08||Math.abs(targetSpin-spin)>.001||(torn?Math.abs(95-pull)>.08:pull>.08);
+ if((moving&&!drag)||(!ready&&window.__gbSandbox))pending=requestAnimationFrame(frame);
 }
 function sound(){try{audio ||= new (window.AudioContext||window.webkitAudioContext)();audio.resume();const n=Math.floor(audio.sampleRate*.3),buf=audio.createBuffer(1,n,audio.sampleRate),d=buf.getChannelData(0);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,1.5)*(.35+.65*Math.abs(Math.sin(i*.003)));const src=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();filter.type='highpass';filter.frequency.value=900;gain.gain.value=.25;src.buffer=buf;src.connect(filter).connect(gain).connect(audio.destination);src.start();src.onended=()=>{src.disconnect();filter.disconnect();gain.disconnect();};}catch(_){} }
-function tear(){if(torn)return;torn=true;tearTime=0;velocity=-12;sound();status.textContent='Stub detached. Your journey is yours to keep.';document.getElementById('tear').disabled=true;}
-function flip(){targetSpin+=Math.PI;status.textContent='Ticket flipped.';}
-function reset(){torn=false;pull=0;tearTime=0;bend=0;velocity=0;targetSpin=0;spin=0;status.textContent='Fresh ticket. Ready for departure.';document.getElementById('tear').disabled=false;}
+function tear(){if(torn)return;wake();torn=true;tearTime=0;velocity=-12;sound();status.textContent='Stub detached. Your journey is yours to keep.';document.getElementById('tear').disabled=true;}
+function flip(){wake();targetSpin+=Math.PI;status.textContent='Ticket flipped.';}
+function reset(){wake();torn=false;pull=0;tearTime=0;bend=0;velocity=0;targetSpin=0;spin=0;status.textContent='Fresh ticket. Ready for departure.';document.getElementById('tear').disabled=false;}
 canvas.addEventListener('pointerdown',e=>{if(drag)return;const p=point(240,CUT,performance.now());drag={id:e.pointerId,x:e.clientX,y:e.clientY,stub:e.clientY>p.y,dist:0};canvas.setPointerCapture(e.pointerId);});
-canvas.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.dist=Math.hypot(dx,dy);bend=Math.max(-110,Math.min(110,dx/scale*.7));if(drag.stub&&!torn){pull=Math.max(0,Math.min(85,dy/scale));if(pull>65)tear();}});
-function release(e){if(!drag||e.pointerId!==drag.id)return;if(e.type==='pointerup'&&drag.dist<7)flip();drag=null;}
+canvas.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;wake();const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.dist=Math.hypot(dx,dy);bend=Math.max(-110,Math.min(110,dx/scale*.7));if(drag.stub&&!torn){pull=Math.max(0,Math.min(85,dy/scale));if(pull>65)tear();}});
+function release(e){if(!drag||e.pointerId!==drag.id)return;if(e.type==='pointerup'&&drag.dist<7)flip();drag=null;wake();}
 canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);canvas.addEventListener('lostpointercapture',release);
 const panel=document.getElementById('panel'),toggle=document.getElementById('tools');toggle.onclick=()=>{panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));};
 for(const el of [panel,toggle])for(const name of ['pointerdown','pointermove','pointerup','touchstart'])el.addEventListener(name,e=>e.stopPropagation());
 document.getElementById('tear').onclick=tear;document.getElementById('flip').onclick=flip;document.getElementById('reset').onclick=reset;
-requestAnimationFrame(frame);
+wake();
 })();
