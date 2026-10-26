@@ -1,0 +1,20 @@
+{
+  "id": "ticket-tear",
+  "title": {
+    "en": "ticket-tear",
+    "zh": "撕纸票"
+  },
+  "intro": {
+    "en": "Bend a foil-stamped lunar ticket, flip it over, and tear off a keepsake with a satisfying rip. An original clean-room paper toy.",
+    "zh": "弯折烫箔月球车票，翻看背面，再伴着清脆的撕纸声扯下存根。独立从零编写的纸张互动玩具。"
+  },
+  "officialFiles": [
+    "vendor/index.html",
+    "vendor/ticket.js",
+    "vendor/ticket.css",
+    "vendor/LICENSE.txt"
+  ],
+  "playHtml": "play.html",
+  "aspect": "phone",
+  "githubRepo": "ypaaaaaaaaaaaaa/ticket-tear"
+}
